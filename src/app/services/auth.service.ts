@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpRequest } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import * as Rx from 'rxjs/operators';
@@ -14,11 +14,11 @@ const authConfig = {
 export class AuthService implements IAuthService {
     constructor(private client: HttpClient) { }
 
-    public token(): string {
+    public getAccessToken(): string {
         return 'authBearer';
     }
 
-    public renewToken(): Observable<string> {
+    public refreshToken(req?: HttpRequest<any>): Observable<string> {
         if (!this.isNeedRefreshToken()) {
             console.log('empty');
             return empty();

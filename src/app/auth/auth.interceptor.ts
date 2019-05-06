@@ -2,7 +2,7 @@ import { HttpClient, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from
 import { Injectable } from '@angular/core';
 import { Observable, Subscriber } from 'rxjs';
 import * as Rx from 'rxjs/operators';
-import { AuthInterceptor, IAuthService } from './auth.interface';
+import { IAuthInterceptor, IAuthService } from './auth.interface';
 
 interface CallerRequest {
     subscriber: Subscriber<any>;
@@ -10,7 +10,7 @@ interface CallerRequest {
 }
 
 @Injectable()
-export class RefreshTokenInterceptor implements HttpInterceptor, AuthInterceptor {
+export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     private auth: IAuthService;
     private http: HttpClient;
     private refreshInProgress: boolean;
@@ -29,11 +29,11 @@ export class RefreshTokenInterceptor implements HttpInterceptor, AuthInterceptor
 
 // оборачиваем Observable из вызывающего кода своим, внутренним Observable
 // далее вернем вызывающему коду Observable, который под нашим контролем здесь
-        let observable = new Observable<HttpEvent<any>>((subscriber) => {
+        const observable = new Observable<HttpEvent<any>>((subscriber) => {
             // как только вызывающий код сделает подписку мы попадаем сюда и подписываемся на наш HttpRequest
             // тобишь выполняем оригинальный запрос
 
-            const token = this.auth.token(req.url);
+            const token = this.auth.getAccessToken(req.url);
             if (token) {
                 req = req.clone({
                     headers: req.headers.set('Authorization', token),
@@ -84,7 +84,7 @@ export class RefreshTokenInterceptor implements HttpInterceptor, AuthInterceptor
             // делаем запрос на восстанавливение токена, и установим флаг, дабы следующие "401ые"
             // просто запоминались но не инициировали refresh
             this.refreshInProgress = true;
-            this.auth.renewToken(request.url)
+            this.auth.refreshToken(request)
                 .pipe(
                     Rx.tap(console.log),
                     Rx.finalize(() => {
@@ -108,7 +108,7 @@ export class RefreshTokenInterceptor implements HttpInterceptor, AuthInterceptor
         this.requests.forEach((c) => {
             // клонируем наш "старый" запрос, с добавлением новенького токена
             let req     = c.failedRequest;
-            const token = this.auth.token(req.url);
+            const token = this.auth.getAccessToken(req);
             if (token)
                 req = req.clone({
                     headers: req.headers.set('Authorization', token),
@@ -120,7 +120,6 @@ export class RefreshTokenInterceptor implements HttpInterceptor, AuthInterceptor
     }
 
     private repeatRequest(requestWithNewToken: HttpRequest<any>, subscriber: Subscriber<any>) {
-
         // и собственно сам процесс переотправки
         this.http.request(requestWithNewToken).subscribe((res) => {
                 subscriber.next(res);

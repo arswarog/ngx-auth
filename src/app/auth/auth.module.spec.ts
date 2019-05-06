@@ -1,11 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpRequest } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { Injectable } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { empty, Observable } from 'rxjs';
+import { Observable } from 'rxjs';
 import { AUTH_PROVIDER, IAuthService } from './auth.interface';
-import { AuthService } from './auth.service';
-
 import { AuthModule } from './auth.module';
 
 let testingController: HttpTestingController;
@@ -26,9 +24,9 @@ class MockAuthService implements IAuthService {
 
     constructor(private http: HttpClient) {}
 
-    public token(url?: string): string {
+    public getAccessToken(req?: HttpRequest<any>): string {
         let jwt = this.jwt;
-        if (url.substr(0, 7) === 'another' && url !== 'another/auth')
+        if (req.url.substr(0, 7) === 'another' && req.url !== 'another/auth')
             jwt = this.anotherJwt;
 
         if (jwt)
@@ -41,19 +39,19 @@ class MockAuthService implements IAuthService {
         console.log('logout');
     }
 
-    public renewToken(url?: string): Observable<any> {
-        console.log('renewToken', url);
+    public refreshToken(req?: HttpRequest<any>): Observable<any> {
+        console.log('refreshToken', req.url);
         return new Observable(observer => {
-            if (url && url.substr(0, 7) === 'another' && this.jwt) {
+            if (req.url && req.url.substr(0, 7) === 'another' && this.jwt) {
                 this.http.post('another/auth', {
                     client_id    : 'clientID',
                     grant_type   : 'refresh_token',
                     refresh_token: this.jwt,
                 }).subscribe(
                     (result: any) => {
-                        console.log('renewToken', result);
+                        console.log('refreshToken', result);
 
-                        if (url.substr(0, 7) === 'another')
+                        if (req.url.substr(0, 7) === 'another')
                             this.anotherJwt = result.access_token;
                         else
                             this.jwt = result.access_token;
@@ -97,7 +95,7 @@ describe('AuthModule', () => {
         expect(http).toBeTruthy();
     });
 
-    // it('no token, no Authorization header', () => {
+    // it('no getAccessToken, no Authorization header', () => {
     //    auth.jwt = null;
     //
     //    http.get('/').subscribe((data) => {
@@ -123,7 +121,7 @@ describe('AuthModule', () => {
         req.flush(expectedData);
     });
 
-    it('append another token to Authorization header', () => {
+    it('append another getAccessToken to Authorization header', () => {
         auth.jwt        = 'some.jwt';
         auth.anotherJwt = 'another.jwt';
 
@@ -204,7 +202,3 @@ describe('AuthModule', () => {
 
     // cancel subscription when cancel request
 });
-
-function sleep(timeout: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, timeout));
-}
