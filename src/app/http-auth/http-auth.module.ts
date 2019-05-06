@@ -4,6 +4,7 @@ import { Observable, Subject, throwError } from 'rxjs';
 import { AUTH_PROVIDER, IAuthInterceptor, IAuthService } from './auth.interface';
 import { AuthInterceptor } from './auth.interceptor';
 import * as Rx from 'rxjs/operators';
+import { AuthService } from '../services/auth.service';
 
 @NgModule({
     providers: [
@@ -26,16 +27,17 @@ import * as Rx from 'rxjs/operators';
     exports  : [HttpClientModule],
 })
 
-export class AuthModule {
+export class HttpAuthModule {
     // @Optional() @SkipSelf() - если вдруг мы попытаемся импортировать CoreModule в AppModule и например UserModule - получим ошибку
-    constructor(@Optional() @SkipSelf() parentModule: AuthModule,
+    constructor(@Optional() @SkipSelf() parentModule: HttpAuthModule,
                 inj: Injector,
-                @Inject(AUTH_PROVIDER) auth: IAuthService,
+                auth: AuthService,
+                // @Inject(AUTH_PROVIDER) auth: IAuthService,
                 http: HttpClient) {
         if (parentModule) {
             // если мы здесь, значит случайно включили CoreModule в двух и более местах
             throw new Error(
-                'AuthModule is already loaded. Import it in the AppModule only');
+                'HttpAuthModule is already loaded. Import it in the AppModule only');
         }
 
         // Получаем интерцепторы которые реализуют интерфейс IAuthInterceptor

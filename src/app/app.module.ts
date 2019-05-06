@@ -2,27 +2,39 @@ import { BrowserModule } from '@angular/platform-browser';
 import { NgModule } from '@angular/core';
 
 import { AppComponent } from './app.component';
-import { AUTH_PROVIDER } from './auth/auth.interface';
-import { AuthModule } from './auth/auth.module';
+import { AUTH_PROVIDER } from './http-auth/auth.interface';
+import { HttpAuthModule } from './http-auth/http-auth.module';
 import { AuthService } from './services/auth.service';
+import { RouterModule, Routes } from '@angular/router';
+
+const routes: Routes = [
+    {
+        path     : '**',
+        component: AppComponent,
+    },
+];
+
 
 @NgModule({
     declarations: [
         AppComponent,
     ],
     imports     : [
+        RouterModule.forRoot(routes),
         BrowserModule,
-        AuthModule,
+        HttpAuthModule,
     ],
     providers   : [
-        {
-            provide : AUTH_PROVIDER,
-            useClass: AuthService,
-        },
+        AuthService,
+        // {
+        //     provide : AUTH_PROVIDER,
+        //     useClass: AuthService,
+        // },
     ],
     bootstrap   : [
         AppComponent,
     ],
 })
 
-export class AppModule {}
+export class AppModule {
+}

@@ -21,58 +21,56 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
         this.auth = auth;
     }
 
-    intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
         // перехватываем только "наши" запросы
         // if (!req.url.includes('api/')) {
         //    return next.handle(req);
         // }
 
-// оборачиваем Observable из вызывающего кода своим, внутренним Observable
-// далее вернем вызывающему коду Observable, который под нашим контролем здесь
+        // оборачиваем Observable из вызывающего кода своим, внутренним Observable
+        // далее вернем вызывающему коду Observable, который под нашим контролем здесь
         const observable = new Observable<HttpEvent<any>>((subscriber) => {
             // как только вызывающий код сделает подписку мы попадаем сюда и подписываемся на наш HttpRequest
             // тобишь выполняем оригинальный запрос
 
-            const token = this.auth.getAccessToken(req.url);
-            if (token) {
-                req = req.clone({
-                    headers: req.headers.set('Authorization', token),
+            this.prepareRequest(request).then(
+                req => {
+                    const originalRequestSubscription
+                        = next.handle(req)
+                        .subscribe(
+                            response => {
+                                // оповещаем в инициатор (success) ответ от сервера
+                                if (this.auth.response) {
+                                    console.log('interceptoer');
+                                    this.auth.response(request, response as any);
+                                }
+                                subscriber.next(response);
+                            },
+                            err => {
+                                if (err.status === 401) {
+                                    // если споймали 401ую - обрабатываем далее по нашему алгоритму
+                                    this.handleUnauthorizedError(subscriber, request);
+                                } else {
+                                    // оповещаем об ошибке
+                                    subscriber.error(err);
+                                }
+                            },
+                            () => {
+                                // комплит запроса, отрабатывает finally() инициатора
+                                subscriber.complete();
+                            },
+                        );
+
+                    return () => {
+                        // на случай если в вызывающем коде мы сделали отписку от запроса
+                        // если не сделать отписку и здесь, в dev tools браузера не увидим отмены запросов,
+                        // т.к инициатор (например Controller) делает отписку от нашего враппера, а не от исходного запроса
+                        originalRequestSubscription.unsubscribe();
+                    };
                 });
-
-                const originalRequestSubscription
-                          = next.handle(req)
-                                .subscribe(
-                                    response => {
-                                        // оповещаем в инициатор (success) ответ от сервера
-                                        subscriber.next(response);
-                                    },
-                                    err => {
-                                        if (err.status === 401) {
-                                            // если споймали 401ую - обрабатываем далее по нашему алгоритму
-                                            this.handleUnauthorizedError(subscriber, req);
-                                        } else {
-                                            // оповещаем об ошибке
-                                            subscriber.error(err);
-                                        }
-                                    },
-                                    () => {
-                                        // комплит запроса, отрабатывает finally() инициатора
-                                        subscriber.complete();
-                                    },
-                                );
-
-                return () => {
-                    // на случай если в вызывающем коде мы сделали отписку от запроса
-                    // если не сделать отписку и здесь, в dev tools браузера не увидим отмены запросов,
-                    // т.к инициатор (например Controller) делает отписку от нашего враппера, а не от исходного запроса
-                    originalRequestSubscription.unsubscribe();
-                };
-            } else {
-                this.handleUnauthorizedError(subscriber, req);
-            }
         });
 
-// вернем вызывающему коду Observable, пусть сам решает когда делать подписку.
+        // вернем вызывающему коду Observable, пусть сам решает когда делать подписку.
         return observable;
     }
 
@@ -107,21 +105,21 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
         console.log('repeatFailedRequests');
         this.requests.forEach((c) => {
             // клонируем наш "старый" запрос, с добавлением новенького токена
-            let req     = c.failedRequest;
-            const token = this.auth.getAccessToken(req);
-            if (token)
-                req = req.clone({
-                    headers: req.headers.set('Authorization', token),
-                });
+            const req = c.failedRequest;
+            console.log('****failed', req);
             // и повторяем (помним с.subscriber - subscriber вызывающего кода)
             this.repeatRequest(req, c.subscriber);
         });
         this.requests = [];
     }
 
-    private repeatRequest(requestWithNewToken: HttpRequest<any>, subscriber: Subscriber<any>) {
+    private repeatRequest(request: HttpRequest<any>, subscriber: Subscriber<any>) {
         // и собственно сам процесс переотправки
-        this.http.request(requestWithNewToken).subscribe((res) => {
+        this.http.request(request).subscribe((res) => {
+                if (this.auth.response) {
+                    console.log('repeat');
+                    this.auth.response(request, res as any);
+                }
                 subscriber.next(res);
             },
             (err) => {
@@ -135,5 +133,24 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                 subscriber.complete();
             },
         );
+    }
+
+    private async prepareRequest(req: HttpRequest<any>): Promise<HttpRequest<any>> {
+        const token = await this.auth.getAccessToken(req);
+        const tokenType = this.auth.getTokenType ? this.auth.getTokenType(req) : 'Bearer';
+
+        if (token && tokenType) {
+            req = req.clone({
+                headers: req.headers.set('Authorization', tokenType + ' ' + token),
+            });
+        }
+
+        console.log('Access token for "' + req.url + '" : ' + token);
+
+        if (this.auth.prepareRequest) {
+            req = this.auth.prepareRequest(req);
+        }
+
+        return req;
     }
 }

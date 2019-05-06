@@ -4,7 +4,8 @@ import { Injectable } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Observable } from 'rxjs';
 import { AUTH_PROVIDER, IAuthService } from './auth.interface';
-import { AuthModule } from './auth.module';
+import { HttpAuthModule } from './http-auth.module';
+import { MockAuthService } from './mock-auth.service.spec';
 
 let testingController: HttpTestingController;
 let http: HttpClient;
@@ -16,61 +17,10 @@ const expectedData = [
     {id: '3', name: 'LastGame', locale: 'en', type: '1'},
 ];
 
-@Injectable()
-class MockAuthService implements IAuthService {
-    public jwt: string = null;
-
-    public anotherJwt: string = null;
-
-    constructor(private http: HttpClient) {}
-
-    public getAccessToken(req?: HttpRequest<any>): string {
-        let jwt = this.jwt;
-        if (req.url.substr(0, 7) === 'another' && req.url !== 'another/auth')
-            jwt = this.anotherJwt;
-
-        if (jwt)
-            return 'Bearer ' + jwt;
-        else
-            return null;
-    }
-
-    public logout(): void {
-        console.log('logout');
-    }
-
-    public refreshToken(req?: HttpRequest<any>): Observable<any> {
-        console.log('refreshToken', req.url);
-        return new Observable(observer => {
-            if (req.url && req.url.substr(0, 7) === 'another' && this.jwt) {
-                this.http.post('another/auth', {
-                    client_id    : 'clientID',
-                    grant_type   : 'refresh_token',
-                    refresh_token: this.jwt,
-                }).subscribe(
-                    (result: any) => {
-                        console.log('refreshToken', result);
-
-                        if (req.url.substr(0, 7) === 'another')
-                            this.anotherJwt = result.access_token;
-                        else
-                            this.jwt = result.access_token;
-
-                        observer.next(result);
-                        observer.complete();
-                    },
-                );
-                return;
-            }
-            observer.complete();
-        });
-    }
-}
-
-describe('AuthModule', () => {
+describe('HttpAuthModule', () => {
     beforeEach(() => TestBed.configureTestingModule({
         imports  : [
-            AuthModule,
+            HttpAuthModule,
             HttpClientTestingModule,
         ],
         providers: [
@@ -83,8 +33,8 @@ describe('AuthModule', () => {
 
     beforeEach(() => {
         testingController = TestBed.get(HttpTestingController);
-        http              = TestBed.get(HttpClient);
-        auth              = TestBed.get(AUTH_PROVIDER);
+        http = TestBed.get(HttpClient);
+        auth = TestBed.get(AUTH_PROVIDER);
     });
 
     afterEach(() => {
@@ -122,7 +72,7 @@ describe('AuthModule', () => {
     });
 
     it('append another getAccessToken to Authorization header', () => {
-        auth.jwt        = 'some.jwt';
+        auth.jwt = 'some.jwt';
         auth.anotherJwt = 'another.jwt';
 
         http.get('/').subscribe((data) => {
@@ -145,7 +95,7 @@ describe('AuthModule', () => {
     });
 
     it('refresh if 401 (retry queries)', () => {
-        auth.jwt        = 'some.jwt';
+        auth.jwt = 'some.jwt';
         auth.anotherJwt = 'bad.jwt';
 
         http.get('another/data').subscribe((data) => {
@@ -175,7 +125,7 @@ describe('AuthModule', () => {
     });
 
     it('refresh if not exists another jwt (retry queries)', () => {
-        auth.jwt        = 'some.jwt';
+        auth.jwt = 'some.jwt';
         auth.anotherJwt = null;
 
         http.get('another/data').subscribe((data) => {
