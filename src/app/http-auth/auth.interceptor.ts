@@ -7,6 +7,7 @@ import { IAuthInterceptor, IAuthService } from './auth.interface';
 interface CallerRequest {
     subscriber: Subscriber<any>;
     failedRequest: HttpRequest<any>;
+    retries: number;
 }
 
 @Injectable()
@@ -22,6 +23,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     }
 
     intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+        console.log('*** request', request.url);
         // перехватываем только "наши" запросы
         // if (!req.url.includes('api/')) {
         //    return next.handle(req);
@@ -35,6 +37,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
 
             this.prepareRequest(request).then(
                 req => {
+                    console.log('*** request to real url', req.url);
                     const originalRequestSubscription
                         = next.handle(req)
                         .subscribe(
@@ -77,7 +80,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     private handleUnauthorizedError(subscriber: Subscriber<any>, request: HttpRequest<any>) {
         console.log('handleUnauthorizedError', request.url);
         // запоминаем "401ый" запрос
-        this.requests.push({subscriber, failedRequest: request});
+        this.requests.push({subscriber, failedRequest: request, retries: 0});
         if (!this.refreshInProgress) {
             // делаем запрос на восстанавливение токена, и установим флаг, дабы следующие "401ые"
             // просто запоминались но не инициировали refresh
@@ -86,7 +89,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                 .pipe(
                     Rx.tap(console.log),
                     Rx.finalize(() => {
-                        console.log('finalize', this.auth);
+                        console.log('finalize');
                         this.refreshInProgress = false;
                     }),
                 )
@@ -103,12 +106,13 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
 
     private repeatFailedRequests() {
         console.log('repeatFailedRequests');
-        this.requests.forEach((c) => {
+        this.requests.forEach((request) => {
             // клонируем наш "старый" запрос, с добавлением новенького токена
-            const req = c.failedRequest;
+            const req = request.failedRequest;
             console.log('****failed', req);
+            request.retries++;
             // и повторяем (помним с.subscriber - subscriber вызывающего кода)
-            this.repeatRequest(req, c.subscriber);
+            this.repeatRequest(req, request.subscriber);
         });
         this.requests = [];
     }

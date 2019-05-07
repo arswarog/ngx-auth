@@ -1,6 +1,6 @@
 import { HttpClient, HttpRequest, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { NEVER, never, Observable } from 'rxjs';
 import * as Rx from 'rxjs/operators';
 import { empty } from 'rxjs';
 import { IAuthService } from '../http-auth/auth.interface';
@@ -58,8 +58,8 @@ export class AuthService implements IAuthService {
     public async getAccessToken(req: HttpRequest<any>): Promise<string> {
         const info = urnInfo(req.url);
         console.log('get access token', info, this.serviceTokens);
-        console.log(this.masterToken);
-        console.log(this.serviceTokens);
+        console.log('masterToken', this.masterToken);
+        console.log('serviceTokens', this.serviceTokens);
         if (info.service && info.path !== 'auth') {
             if (this.serviceTokens[info.service]) {
                 return this.serviceTokens[info.service];
@@ -67,6 +67,9 @@ export class AuthService implements IAuthService {
             await this.refreshToken(req).toPromise();
             return this.serviceTokens[info.service];
         } else {
+            if (!this.masterToken) {
+                await this.refreshToken().toPromise();
+            }
             return this.masterToken;
         }
     }
@@ -83,11 +86,11 @@ export class AuthService implements IAuthService {
      * @param req
      */
     public refreshToken(req?: HttpRequest<any>): Observable<string> {
-        const info = urnInfo(req.url);
+        const info = req ? urnInfo(req.url) : urnInfo('');
 
         console.log('refreshToken', info);
 
-        if (info.service) {
+        if (info.service && info.path !== 'auth') {
             // if (!this.isNeedRefreshToken()) {
             //     console.log('empty');
             //     return empty();
@@ -107,15 +110,17 @@ export class AuthService implements IAuthService {
             //     console.log('empty');
             //     return empty();
             // }
-            return this.http.post<string>(`https://domain/oauth/token`,
-                {
-                    client_id    : 'authConfig.clientID',
-                    grant_type   : 'refresh_token',
-                    refresh_token: localStorage.getItem('refresh_token'),
-                },
-            ).pipe(
-                Rx.tap(res => this.onAuthRenew(res, req)),
-            );
+            this.login('/');
+            return NEVER;
+            // return this.http.post<string>(`https://domain/oauth/token`,
+            //     {
+            //         client_id    : 'authConfig.clientID',
+            //         grant_type   : 'refresh_token',
+            //         refresh_token: localStorage.getItem('refresh_token'),
+            //     },
+            // ).pipe(
+            //     Rx.tap(res => this.onAuthRenew(res, req)),
+            // );
         }
     }
 
@@ -163,7 +168,7 @@ export class AuthService implements IAuthService {
      * Выход
      */
     public logout() {
-        alert('logout');
+        this.login('/');
     }
 
     restoreMasterToken() {

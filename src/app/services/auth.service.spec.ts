@@ -1,5 +1,5 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { HttpClient, HttpRequest } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpRequest } from '@angular/common/http';
 import { AuthService, urnInfo } from './auth.service';
 import { HttpAuthModule } from '../http-auth/http-auth.module';
 import { TestBed } from '@angular/core/testing';
@@ -42,11 +42,11 @@ describe('AuthService', () => {
             });
         });
         it('simple url', () => {
-            expect(urnInfo('client/auth')).toEqual({
+            expect(urnInfo('client/auth/')).toEqual({
                 service       : '',
                 serviceVersion: '',
                 version       : '',
-                path          : 'client/auth',
+                path          : 'client/auth/',
             });
         });
     });
@@ -152,6 +152,7 @@ describe('AuthService', () => {
             testingController = TestBed.get(HttpTestingController);
             http = TestBed.get(HttpClient);
             auth = TestBed.get(AuthService);
+            auth.login = () => {throw new Error('WTF?');};
         });
 
         afterEach(() => {
@@ -162,18 +163,64 @@ describe('AuthService', () => {
             expect(http).toBeTruthy();
         });
 
-        // it('no getAccessToken, no Authorization header', () => {
-        //    auth.jwt = null;
-        //
-        //    http.get('/').subscribe((data) => {
-        //        expect(data).toEqual(expectedData);
-        //    });
-        //
-        //    const req = testingController.expectOne('/');
-        //    expect(req.request.method).toEqual('GET');
-        //    expect(req.request.headers.get('Authorization')).toBeNull();
-        //    req.flush(expectedData);
-        // });
+        it('append Authorization header for root service', async () => {
+            auth.masterToken = 'master.jwt';
+
+            http.get('client/auth/').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            req.flush(expectedData);
+        });
+
+        it('append Authorization header for bank service', async () => {
+            auth.masterToken = 'master.jwt';
+            auth.serviceTokens = {
+                bank: 'bank.jwt',
+            };
+
+            http.get('bank/v1:user').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.mapping.bank + '/v1/user');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer bank.jwt');
+            req.flush(expectedData);
+        });
+
+        it('authorize Authorization header for bank service', async () => {
+            auth.masterToken = 'master.jwt';
+            auth.serviceTokens = {
+                bank: 'bank.jwt',
+            };
+
+            http.get('bank:auth').subscribe((data) => {
+                expect(data).toEqual({
+                    jwt: 'new.bank.jwt',
+                });
+            });
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.mapping.bank + '/auth');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            req.flush({
+                jwt: 'new.bank.jwt',
+            });
+
+            expect(auth.serviceTokens).toEqual({
+                bank: 'new.bank.jwt',
+            });
+        });
 
         it('refresh if not exists bank jwt (retry queries)', async () => {
             auth.masterToken = 'master.jwt';
@@ -185,11 +232,11 @@ describe('AuthService', () => {
 
             await sleep();
 
-            const reqRetry = testingController.expectOne(auth.mapping.bank + '/auth');
+            const reqAuth = testingController.expectOne(auth.mapping.bank + '/auth');
 
-            expect(reqRetry.request.method).toEqual('GET');
-            expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
-            reqRetry.flush({
+            expect(reqAuth.request.method).toEqual('GET');
+            expect(reqAuth.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            reqAuth.flush({
                 jwt: 'new.jwt',
             });
 
@@ -236,44 +283,72 @@ describe('AuthService', () => {
             reqRetry.flush(expectedData);
         });
 
-        it('append Authorization header for root service', async () => {
-            auth.masterToken = 'master.jwt';
-
-            http.get('client/auth').subscribe((data) => {
-                expect(data).toEqual(expectedData);
-            });
-
-            await sleep();
-
-            const req = testingController.expectOne(auth.apiUrl + '/client/auth');
-            expect(req.request.method).toEqual('GET');
-            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
-            req.flush(expectedData);
-        });
-
-        it('append Authorization header for bank service', async () => {
+        it('404 error', async () => {
             auth.masterToken = 'master.jwt';
             auth.serviceTokens = {
                 bank: 'bank.jwt',
             };
 
-            http.get('bank/v1:user').subscribe((data) => {
-                expect(data).toEqual(expectedData);
-            });
+            http.get('bank/v1:bad/path').subscribe(
+                data => {
+                    throw new Error('This must be failed');
+                },
+                (error: HttpErrorResponse) => {
+                    expect(error.status).toEqual(404);
+                    expect(error.statusText).toEqual('Not found');
+                },
+            );
 
             await sleep();
 
-            const req = testingController.expectOne(auth.mapping.bank + '/v1/user');
+            const req = testingController.expectOne(auth.mapping.bank + '/v1/bad/path');
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer bank.jwt');
-            req.flush(expectedData);
+            req.flush(expectedData, {status: 404, statusText: 'Not found'});
+        });
+    });
+
+    describe('API login', () => {
+        beforeEach(() => TestBed.configureTestingModule({
+            imports  : [
+                HttpAuthModule,
+                HttpClientTestingModule,
+            ],
+            providers: [
+                AuthService,
+            ],
+        }));
+
+        beforeEach(() => {
+            testingController = TestBed.get(HttpTestingController);
+            http = TestBed.get(HttpClient);
+            auth = TestBed.get(AuthService);
+            auth.login = () => {
+                console.log('login');
+                auth['loginOk'] = true;
+            };
         });
 
-        it('append Authorization header for bank service', async () => {
-            auth.masterToken = 'master.jwt';
-            auth.serviceTokens = {
-                bank: 'bank.jwt',
-            };
+        afterEach(() => {
+            testingController.verify();
+        });
+
+        it('relogin if master token is null (client/auth/)', async () => {
+            auth.masterToken = null;
+            auth.serviceTokens = {};
+
+            http.get('client/auth/').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            expect(auth['loginOk']).toBeTruthy();
+        });
+
+        it('relogin if master token is null (bank:auth)', async () => {
+            auth.masterToken = null;
+            auth.serviceTokens = {};
 
             http.get('bank:auth').subscribe((data) => {
                 expect(data).toEqual(expectedData);
@@ -281,39 +356,63 @@ describe('AuthService', () => {
 
             await sleep();
 
-            const req = testingController.expectOne(auth.mapping.bank + '/auth');
-            expect(req.request.method).toEqual('GET');
-            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
-            req.flush(expectedData);
+            expect(auth['loginOk']).toBeTruthy();
         });
 
-        // it('append another getAccessToken to Authorization header', () => {
-        //     auth.jwt = 'some.jwt';
-        //     auth.anotherJwt = 'another.jwt';
-        //
-        //     http.get('/').subscribe((data) => {
-        //         expect(data).toEqual(expectedData);
-        //     });
-        //
-        //     const req = testingController.expectOne('/');
-        //     expect(req.request.method).toEqual('GET');
-        //     expect(req.request.headers.get('Authorization')).toEqual('Bearer some.jwt');
-        //     req.flush(expectedData);
-        //
-        //     http.get('another/').subscribe((data) => {
-        //         expect(data).toEqual(expectedData);
-        //     });
-        //
-        //     const req2 = testingController.expectOne('another/');
-        //     expect(req2.request.method).toEqual('GET');
-        //     expect(req2.request.headers.get('Authorization')).toEqual('Bearer another.jwt');
-        //     req2.flush(expectedData);
-        // });
+        it('relogin if bank jwt not exists and bad master token is bad', async () => {
+            auth.masterToken = 'bad.master.jwt';
+            auth.serviceTokens = {};
 
-        // // error if not 401 (without retry queries)
-        //
-        // // cancel subscription when cancel request
-        // })
+            http.get('bank/v1:user').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.mapping.bank + '/auth');
+
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer bad.master.jwt');
+            req.flush({}, {status: 401, statusText: 'Unauthorized'});
+
+            await sleep();
+
+            expect(auth['loginOk']).toBeTruthy();
+        });
+
+        it('relogin if not exists bank and master jwt (retry queries)', async () => {
+            auth.masterToken = null;
+            auth.serviceTokens = {};
+
+            http.get('bank/v1:user').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            expect(auth['loginOk']).toBeTruthy();
+        });
+
+        it('relogin if client/auth/ return 401', async () => {
+            auth.masterToken = 'bad.master.jwt';
+            auth.serviceTokens = {};
+
+            http.get('client/auth/').subscribe((data) => {});
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer bad.master.jwt');
+            req.flush({}, {status: 401, statusText: 'Unauthorized'});
+
+            await sleep();
+
+            expect(auth['loginOk']).toBeTruthy();
+        });
+
+        /// client/auth 401
     });
 });
 

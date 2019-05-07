@@ -25,3 +25,9 @@ Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protrac
 ## Further help
 
 To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+
+
+OAuth is not simple but the most popular authorization protocol
+Facebook and Vk.com use protocol similar to OAuth, but they are different from OAuth
+When authorization protocol a bit harder then usually, your have the biggest problem and a lot of code in project
+Our authorization protocol is not much more harder but out project is completely different from usual project
