@@ -31,8 +31,8 @@ export class HttpAuthModule {
     // @Optional() @SkipSelf() - если вдруг мы попытаемся импортировать CoreModule в AppModule и например UserModule - получим ошибку
     constructor(@Optional() @SkipSelf() parentModule: HttpAuthModule,
                 inj: Injector,
-                auth: AuthService,
-                // @Inject(AUTH_PROVIDER) auth: IAuthService,
+                // auth: AuthService,
+                @Inject(AUTH_PROVIDER) auth: IAuthService,
                 http: HttpClient) {
         if (parentModule) {
             // если мы здесь, значит случайно включили CoreModule в двух и более местах

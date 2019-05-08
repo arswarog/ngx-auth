@@ -1,13 +1,12 @@
 import { HttpClient, HttpRequest, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { NEVER, never, Observable } from 'rxjs';
+import { BehaviorSubject, NEVER, Observable } from 'rxjs';
 import * as Rx from 'rxjs/operators';
-import { empty } from 'rxjs';
-import { IAuthService } from '../http-auth/auth.interface';
-import { Router } from '@angular/router';
+import { AuthStatus, IAuthService } from '../http-auth/auth.interface';
 
 @Injectable()
 export class AuthService implements IAuthService {
+    public authStatus$: BehaviorSubject<AuthStatus>;
     public masterToken: string = null;
     public serviceTokens: { [service: string]: string } = {};
 
@@ -155,12 +154,12 @@ export class AuthService implements IAuthService {
         //     return;
         // }
 
-        const redirect_uri = window.location.origin + '/auth/code?back=' + back;
+        const redirectUri = window.location.origin + '/auth/code?back=' + back;
 
         // if ([
         //     'auth/code',
         // ].indexOf(this.router.url) === -1) {
-        window.location.href = this.loginURL('authorize', redirect_uri);
+        window.location.href = this.loginURL('authorize', redirectUri);
         // }
     }
 

@@ -26,10 +26,10 @@ const routes: Routes = [
     ],
     providers   : [
         AuthService,
-        // {
-        //     provide : AUTH_PROVIDER,
-        //     useClass: AuthService,
-        // },
+        {
+            provide : AUTH_PROVIDER,
+            useExisting: AuthService,
+        },
     ],
     bootstrap   : [
         AppComponent,

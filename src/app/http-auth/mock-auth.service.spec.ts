@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
-import { IAuthService } from './auth.interface';
+import { AuthStatus, IAuthService } from './auth.interface';
 import { HttpClient, HttpRequest, HttpResponse } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 
 @Injectable()
 export class MockAuthService implements IAuthService {
+    public authStatus$ = new BehaviorSubject<AuthStatus>(AuthStatus.Starting);
+
     public jwt: string = null;
 
     public anotherJwt: string = null;
@@ -14,14 +16,17 @@ export class MockAuthService implements IAuthService {
     public async getAccessToken(req?: HttpRequest<any>): Promise<string> {
         let jwt = this.jwt;
         if (req.url.substr(0, 7) === 'another' && req.url !== 'another/auth') {
+            if (!this.anotherJwt) {
+                await this.refreshToken(req).toPromise();
+            }
             jwt = this.anotherJwt;
         }
 
-        if (jwt) {
-            return 'Bearer ' + jwt;
-        } else {
-            return null;
-        }
+        return jwt;
+    }
+
+    public login(): void {
+        console.log('login');
     }
 
     public logout(): void {

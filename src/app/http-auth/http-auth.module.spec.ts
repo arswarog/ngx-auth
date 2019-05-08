@@ -3,7 +3,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { Injectable } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Observable } from 'rxjs';
-import { AUTH_PROVIDER, IAuthService } from './auth.interface';
+import { AUTH_PROVIDER, IAuthService, sleep } from './auth.interface';
 import { HttpAuthModule } from './http-auth.module';
 import { MockAuthService } from './mock-auth.service.spec';
 
@@ -58,12 +58,14 @@ describe('HttpAuthModule', () => {
     //    req.flush(expectedData);
     // });
 
-    it('append Authorization header', () => {
+    it('append Authorization header', async () => {
         auth.jwt = 'some.jwt';
 
         http.get('/').subscribe((data) => {
             expect(data).toEqual(expectedData);
         });
+
+        await sleep();
 
         const req = testingController.expectOne('/');
         expect(req.request.method).toEqual('GET');
@@ -71,13 +73,15 @@ describe('HttpAuthModule', () => {
         req.flush(expectedData);
     });
 
-    it('append another getAccessToken to Authorization header', () => {
+    it('append another getAccessToken to Authorization header', async () => {
         auth.jwt = 'some.jwt';
         auth.anotherJwt = 'another.jwt';
 
         http.get('/').subscribe((data) => {
             expect(data).toEqual(expectedData);
         });
+
+        await sleep();
 
         const req = testingController.expectOne('/');
         expect(req.request.method).toEqual('GET');
@@ -88,13 +92,15 @@ describe('HttpAuthModule', () => {
             expect(data).toEqual(expectedData);
         });
 
+        await sleep();
+
         const req2 = testingController.expectOne('another/');
         expect(req2.request.method).toEqual('GET');
         expect(req2.request.headers.get('Authorization')).toEqual('Bearer another.jwt');
         req2.flush(expectedData);
     });
 
-    it('refresh if 401 (retry queries)', () => {
+    it('refresh if 401 (retry queries)', async () => {
         auth.jwt = 'some.jwt';
         auth.anotherJwt = 'bad.jwt';
 
@@ -102,11 +108,15 @@ describe('HttpAuthModule', () => {
             expect(data).toEqual(expectedData);
         });
 
+        await sleep();
+
         const req = testingController.expectOne('another/data');
 
         expect(req.request.method).toEqual('GET');
         expect(req.request.headers.get('Authorization')).toEqual('Bearer bad.jwt');
         req.flush({error: 'Unauthorized'}, {status: 401, statusText: 'Unauthorized'});
+
+        await sleep();
 
         const reqRefresh = testingController.expectOne('another/auth');
         expect(reqRefresh.request.method).toEqual('POST');
@@ -116,6 +126,8 @@ describe('HttpAuthModule', () => {
             token_type  : 'bearer',
             expires_in  : 86400,
         });
+
+        await sleep();
 
         const reqRetry = testingController.expectOne('another/data');
 
@@ -124,13 +136,15 @@ describe('HttpAuthModule', () => {
         reqRetry.flush(expectedData);
     });
 
-    it('refresh if not exists another jwt (retry queries)', () => {
+    it('refresh if not exists another jwt (retry queries)', async () => {
         auth.jwt = 'some.jwt';
         auth.anotherJwt = null;
 
         http.get('another/data').subscribe((data) => {
             expect(data).toEqual(expectedData);
         });
+
+        await sleep();
 
         const reqRefresh = testingController.expectOne('another/auth');
         expect(reqRefresh.request.method).toEqual('POST');
@@ -140,6 +154,8 @@ describe('HttpAuthModule', () => {
             token_type  : 'bearer',
             expires_in  : 86400,
         });
+
+        await sleep();
 
         const reqRetry = testingController.expectOne('another/data');
 

@@ -3,7 +3,7 @@ import { HttpClient, HttpErrorResponse, HttpRequest } from '@angular/common/http
 import { AuthService, urnInfo } from './auth.service';
 import { HttpAuthModule } from '../http-auth/http-auth.module';
 import { TestBed } from '@angular/core/testing';
-import { AUTH_PROVIDER } from '../http-auth/auth.interface';
+import { AUTH_PROVIDER, sleep } from '../http-auth/auth.interface';
 
 let testingController: HttpTestingController;
 let http: HttpClient;
@@ -145,6 +145,10 @@ describe('AuthService', () => {
             ],
             providers: [
                 AuthService,
+                {
+                    provide    : AUTH_PROVIDER,
+                    useExisting: AuthService,
+                },
             ],
         }));
 
@@ -316,6 +320,10 @@ describe('AuthService', () => {
             ],
             providers: [
                 AuthService,
+                {
+                    provide    : AUTH_PROVIDER,
+                    useExisting: AuthService,
+                },
             ],
         }));
 
@@ -415,7 +423,3 @@ describe('AuthService', () => {
         /// client/auth 401
     });
 });
-
-function sleep(timeout = 0): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, timeout));
-}
