@@ -13,16 +13,20 @@ export class MockAuthService implements IAuthService {
 
     constructor(private http: HttpClient) {}
 
-    public async getAccessToken(req?: HttpRequest<any>): Promise<string> {
-        let jwt = this.jwt;
+    public async isNeedRefresh(req?: HttpRequest<any>): Promise<boolean> {
         if (req.url.substr(0, 7) === 'another' && req.url !== 'another/auth') {
-            if (!this.anotherJwt) {
-                await this.refreshToken(req).toPromise();
-            }
-            jwt = this.anotherJwt;
+            return !this.anotherJwt || !this.jwt;
         }
 
-        return jwt;
+        return !this.jwt;
+    }
+
+    public async getAccessToken(req?: HttpRequest<any>): Promise<string> {
+        if (req.url.substr(0, 7) === 'another' && req.url !== 'another/auth') {
+            return this.anotherJwt;
+        }
+
+        return this.jwt;
     }
 
     public login(): void {
@@ -33,9 +37,9 @@ export class MockAuthService implements IAuthService {
         console.log('logout');
     }
 
-    public refreshToken(req?: HttpRequest<any>): Observable<any> {
+    public refreshToken(req?: HttpRequest<any>): Promise<boolean> {
         console.log('refreshToken', req.url);
-        return new Observable(observer => {
+        return new Promise(resolve => {
             if (req.url && req.url.substr(0, 7) === 'another' && this.jwt) {
                 this.http.post('another/auth', {
                     client_id    : 'clientID',
@@ -51,13 +55,16 @@ export class MockAuthService implements IAuthService {
                             this.jwt = result.access_token;
                         }
 
-                        observer.next(result);
-                        observer.complete();
+                        resolve(true);
+                    },
+                    error => {
+                        resolve(false);
                     },
                 );
                 return;
+            } else {
+                return true;
             }
-            observer.complete();
         });
     }
 

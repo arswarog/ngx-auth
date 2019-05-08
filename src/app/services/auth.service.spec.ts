@@ -3,7 +3,7 @@ import { HttpClient, HttpErrorResponse, HttpRequest } from '@angular/common/http
 import { AuthService, urnInfo } from './auth.service';
 import { HttpAuthModule } from '../http-auth/http-auth.module';
 import { TestBed } from '@angular/core/testing';
-import { AUTH_PROVIDER, sleep } from '../http-auth/auth.interface';
+import { AUTH_PROVIDER, AuthStatus, sleep } from '../http-auth/auth.interface';
 
 let testingController: HttpTestingController;
 let http: HttpClient;
@@ -167,6 +167,46 @@ describe('AuthService', () => {
             expect(http).toBeTruthy();
         });
 
+        it('request can not start because status is Starting', async () => {
+            auth.masterToken = 'master.jwt';
+            auth.authStatus = AuthStatus.Starting;
+
+            http.get('client/auth/').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            req.flush(expectedData);
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
+        });
+
+        it('request can not start because status is Starting', async () => {
+            auth.masterToken = 'master.jwt';
+            auth.authStatus = AuthStatus.Starting;
+
+            http.get('client/auth/').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            req.flush(expectedData);
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
+        });
+
         it('append Authorization header for root service', async () => {
             auth.masterToken = 'master.jwt';
 
@@ -180,6 +220,8 @@ describe('AuthService', () => {
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
             req.flush(expectedData);
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
 
         it('append Authorization header for bank service', async () => {
@@ -198,6 +240,8 @@ describe('AuthService', () => {
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer bank.jwt');
             req.flush(expectedData);
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
 
         it('authorize Authorization header for bank service', async () => {
@@ -212,6 +256,8 @@ describe('AuthService', () => {
                 });
             });
 
+            expect(auth.authStatus).toEqual(AuthStatus.Refreshing);
+
             await sleep();
 
             const req = testingController.expectOne(auth.mapping.bank + '/auth');
@@ -224,6 +270,10 @@ describe('AuthService', () => {
             expect(auth.serviceTokens).toEqual({
                 bank: 'new.bank.jwt',
             });
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
 
         it('refresh if not exists bank jwt (retry queries)', async () => {

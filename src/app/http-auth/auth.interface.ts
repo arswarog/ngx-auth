@@ -16,10 +16,13 @@ export enum AuthStatus {
 }
 
 export interface IAuthService {
-    authStatus$: Observable<AuthStatus>;
+    authStatus$?: Observable<AuthStatus>;
+    authStatus?: AuthStatus;
+    canRequest?(req?: HttpRequest<any>): Promise<boolean>;
+    isNeedRefresh(req?: HttpRequest<any>): Promise<boolean>;
     getAccessToken(req?: HttpRequest<any>): Promise<string>;
     getTokenType?(req?: HttpRequest<any>): string;
-    refreshToken(req?: HttpRequest<any>): Observable<any>;
+    refreshToken(req?: HttpRequest<any>): Promise<boolean>;
     login(backUri?: string | string[]): void;
     logout(): void;
     response?(request: HttpRequest<any>, response: HttpResponse<any>);

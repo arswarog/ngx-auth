@@ -1,6 +1,6 @@
 import { HttpClient, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, Subscriber } from 'rxjs';
+import { BehaviorSubject, Observable, Subscriber } from 'rxjs';
 import * as Rx from 'rxjs/operators';
 import { AuthStatus, IAuthInterceptor, IAuthService } from './auth.interface';
 
@@ -20,6 +20,11 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     public init(http: HttpClient, auth: IAuthService) {
         this.http = http;
         this.auth = auth;
+    }
+
+    public setStatus(status: AuthStatus) {
+        this.auth.authStatus = status;
+        (this.auth.authStatus$ as BehaviorSubject<AuthStatus>).next(status);
     }
 
     intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
@@ -44,7 +49,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                                     console.log('interceptoer');
                                     this.auth.response(request, response as any);
                                 }
-                                this.auth.authStatus$.next(AuthStatus.Ok);
+                                this.setStatus(AuthStatus.Ok);
                                 subscriber.next(response);
                             },
                             err => {
@@ -75,7 +80,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
         return observable;
     }
 
-    private handleUnauthorizedError(subscriber: Subscriber<any>, request: HttpRequest<any>) {
+    private async handleUnauthorizedError(subscriber: Subscriber<any>, request: HttpRequest<any>): Promise<void> {
         console.log('handleUnauthorizedError', request.url);
         // запоминаем "401ый" запрос
         this.requests.push({subscriber, failedRequest: request, retries: 0});
@@ -83,24 +88,18 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
             // делаем запрос на восстанавливение токена, и установим флаг, дабы следующие "401ые"
             // просто запоминались но не инициировали refresh
             this.refreshInProgress = true;
-            this.auth.authStatus$.next(AuthStatus.Refreshing);
-            this.auth.refreshToken(request)
-                .pipe(
-                    Rx.tap(console.log),
-                    Rx.finalize(() => {
-                        console.log('finalize');
-                        this.refreshInProgress = false;
-                    }),
-                )
-                .subscribe(() =>
-                        // если токен рефрешнут успешно, повторим запросы которые накопились пока мы ждали ответ от рефреша
-                        this.repeatFailedRequests(),
-                    () => {
-                        this.auth.authStatus$.next(AuthStatus.Unauthorized);
-                        // если по каким - то причинам запрос на рефреш не отработал, то делаем логаут
-                        this.auth.logout();
-                    },
-                );
+            this.setStatus(AuthStatus.Refreshing);
+            const refresh = await this.auth.refreshToken(request);
+            console.log('finalize');
+            this.refreshInProgress = false;
+            if (refresh) {
+                // если токен рефрешнут успешно, повторим запросы которые накопились пока мы ждали ответ от рефреша
+                this.repeatFailedRequests();
+            } else {
+                this.setStatus(AuthStatus.Unauthorized);
+                // если по каким - то причинам запрос на рефреш не отработал, то делаем логаут
+                this.auth.logout();
+            }
         }
     }
 
@@ -140,6 +139,11 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     }
 
     private async prepareRequest(req: HttpRequest<any>): Promise<HttpRequest<any>> {
+        const needRefresh = await this.auth.isNeedRefresh(req);
+        if (needRefresh) {
+
+            await this.auth.refreshToken(req);
+        }
         const token = await this.auth.getAccessToken(req);
         const tokenType = this.auth.getTokenType ? this.auth.getTokenType(req) : 'Bearer';
 

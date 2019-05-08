@@ -49,23 +49,19 @@ export class HttpAuthModule {
     }
 }
 
-export function refreshToken(auth: IAuthService) {
+export function refreshToken(auth: IAuthService): () => Promise<any> {
     return () => {
         // return own subject to complete this initialization step in any case
         // otherwise app will stay on preloader if any error while getAccessToken refreshing occurred
         const subj = new Subject();
-        auth.refreshToken()
-            .pipe(
-                Rx.finalize(() => {
-                    subj.complete();
-                }),
-                Rx.catchError((err, caught: Observable<any>) => {
-                    // do logout, redirect to login will occurs at UserService with onLoggedOut event
-                    auth.logout();
-                    return throwError(err);
-                }),
-            ).subscribe();
-        // need to return Promise!!
-        return subj.toPromise();
+        return auth.refreshToken().then(
+            () => {
+                subj.complete();
+            },
+            () => {
+                // do logout, redirect to login will occurs at UserService with onLoggedOut event
+                auth.logout();
+            },
+        );
     };
 }

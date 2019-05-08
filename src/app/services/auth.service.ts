@@ -6,7 +6,8 @@ import { AuthStatus, IAuthService } from '../http-auth/auth.interface';
 
 @Injectable()
 export class AuthService implements IAuthService {
-    public authStatus$ = new BehaviorSubject<AuthStatus>(null);
+    public authStatus$: Observable<AuthStatus>;
+    public authStatus: AuthStatus;
     public masterToken: string = null;
     public serviceTokens: { [service: string]: string } = {};
 
@@ -50,6 +51,21 @@ export class AuthService implements IAuthService {
         return request;
     }
 
+    public async isNeedRefresh(req: HttpRequest<any>): Promise<boolean> {
+        const info = urnInfo(req.url);
+        if (info.service && info.path !== 'auth') {
+            if (this.serviceTokens[info.service]) {
+                return false;
+            }
+            return true;
+        } else {
+            if (!this.masterToken && info.path !== 'client/auth/') {
+                return true;
+            }
+            return false;
+        }
+    }
+
     /**
      * Получение access_token и, при необходимости, его запрос
      * @param req
@@ -63,11 +79,11 @@ export class AuthService implements IAuthService {
             if (this.serviceTokens[info.service]) {
                 return this.serviceTokens[info.service];
             }
-            await this.refreshToken(req).toPromise();
+            // await this.refreshToken(req).toPromise();
             return this.serviceTokens[info.service];
         } else {
             if (!this.masterToken && info.path !== 'client/auth/') {
-                await this.refreshToken().toPromise();
+                // await this.refreshToken().toPromise();
             }
             return this.masterToken;
         }
@@ -80,47 +96,42 @@ export class AuthService implements IAuthService {
         return 'Bearer';
     }
 
+    public async canRequest(req?: HttpRequest<any>): Promise<boolean> {
+        const info = req ? urnInfo(req.url) : urnInfo('');
+
+        console.log('canRequest', info);
+
+        if (this.authStatus === AuthStatus.Ok)
+            return true;
+
+        return !info.service || info.path === 'auth';
+    }
+
     /**
      * Запрос на обновление токена
      * @param req
      */
-    public refreshToken(req?: HttpRequest<any>): Observable<string> {
-        const info = req ? urnInfo(req.url) : urnInfo('');
+    public refreshToken(req?: HttpRequest<any>): Promise<boolean> {
+        return new Promise(resolve => {
+            const info = req ? urnInfo(req.url) : urnInfo('');
 
-        console.log('refreshToken', info);
+            console.log('refreshToken', info);
 
-        if (info.service && info.path !== 'auth') {
-            // if (!this.isNeedRefreshToken()) {
-            //     console.log('empty');
-            //     return empty();
-            // }
-            // if (this.waitings[info.service]) {
-            //     return this.waitings[info.service];
-            // } else {
-            const observer = this.http.get<string>(info.service + ':auth').pipe(
-                Rx.tap(res => this.onAuthRenew(res, req)),
-                // Rx.finalize()
-            );
-            this.waitings[info.service] = observer;
-            return observer;
-            // }
-        } else {
-            // if (!this.isNeedRefreshToken()) {
-            //     console.log('empty');
-            //     return empty();
-            // }
-            this.login('/');
-            return NEVER;
-            // return this.http.post<string>(`https://domain/oauth/token`,
-            //     {
-            //         client_id    : 'authConfig.clientID',
-            //         grant_type   : 'refresh_token',
-            //         refresh_token: localStorage.getItem('refresh_token'),
-            //     },
-            // ).pipe(
-            //     Rx.tap(res => this.onAuthRenew(res, req)),
-            // );
-        }
+            if (info.service && info.path !== 'auth') {
+                const observer = this.http.get<string>(info.service + ':auth').pipe(
+                    Rx.tap(res => this.onAuthRenew(res, req)),
+                    // Rx.finalize()
+                );
+                this.waitings[info.service] = observer;
+                observer.subscribe(
+                    () => resolve(true),
+                    () => resolve(false),
+                );
+            } else {
+                this.login('/');
+                return;
+            }
+        });
     }
 
     /**

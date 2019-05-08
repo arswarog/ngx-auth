@@ -1,13 +1,18 @@
 import { HttpClient } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { AUTH_PROVIDER, AuthStatus, sleep } from './auth.interface';
+import { AUTH_PROVIDER, AuthStatus, IAuthService, sleep } from './auth.interface';
 import { HttpAuthModule } from './http-auth.module';
 import { MockAuthService } from './mock-auth.service.spec';
+import { BehaviorSubject } from 'rxjs';
+
+interface IInnerAuthService extends IAuthService {
+    authStatus$: BehaviorSubject<AuthStatus>;
+}
 
 let testingController: HttpTestingController;
 let http: HttpClient;
-let auth: MockAuthService;
+let auth: MockAuthService & IInnerAuthService;
 
 const expectedData = [
     {id: '1', name: 'FirstGame', locale: 'ru', type: '2'},
