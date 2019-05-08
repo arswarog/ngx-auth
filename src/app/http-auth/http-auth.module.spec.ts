@@ -1,9 +1,7 @@
-import { HttpClient, HttpRequest } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { Injectable } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Observable } from 'rxjs';
-import { AUTH_PROVIDER, IAuthService, sleep } from './auth.interface';
+import { AUTH_PROVIDER, AuthStatus, sleep } from './auth.interface';
 import { HttpAuthModule } from './http-auth.module';
 import { MockAuthService } from './mock-auth.service.spec';
 
@@ -45,19 +43,6 @@ describe('HttpAuthModule', () => {
         expect(http).toBeTruthy();
     });
 
-    // it('no getAccessToken, no Authorization header', () => {
-    //    auth.jwt = null;
-    //
-    //    http.get('/').subscribe((data) => {
-    //        expect(data).toEqual(expectedData);
-    //    });
-    //
-    //    const req = testingController.expectOne('/');
-    //    expect(req.request.method).toEqual('GET');
-    //    expect(req.request.headers.get('Authorization')).toBeNull();
-    //    req.flush(expectedData);
-    // });
-
     it('append Authorization header', async () => {
         auth.jwt = 'some.jwt';
 
@@ -71,6 +56,8 @@ describe('HttpAuthModule', () => {
         expect(req.request.method).toEqual('GET');
         expect(req.request.headers.get('Authorization')).toEqual('Bearer some.jwt');
         req.flush(expectedData);
+
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
     });
 
     it('append another getAccessToken to Authorization header', async () => {
@@ -98,6 +85,8 @@ describe('HttpAuthModule', () => {
         expect(req2.request.method).toEqual('GET');
         expect(req2.request.headers.get('Authorization')).toEqual('Bearer another.jwt');
         req2.flush(expectedData);
+
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
     });
 
     it('refresh if 401 (retry queries)', async () => {
@@ -134,6 +123,8 @@ describe('HttpAuthModule', () => {
         expect(reqRetry.request.method).toEqual('GET');
         expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
         reqRetry.flush(expectedData);
+
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
     });
 
     it('refresh if not exists another jwt (retry queries)', async () => {
@@ -162,9 +153,13 @@ describe('HttpAuthModule', () => {
         expect(reqRetry.request.method).toEqual('GET');
         expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
         reqRetry.flush(expectedData);
+
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
     });
 
     // error if not 401 (without retry queries)
 
     // cancel subscription when cancel request
+
+
 });

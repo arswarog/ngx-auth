@@ -24,7 +24,9 @@ export class AppComponent implements OnInit, OnDestroy {
                 private http: HttpClient,
                 private router: Router,
                 public authService: AuthService) {
-        this.authService.restoreMasterToken();
+        if (!this.authService.restoreMasterToken())
+            if (confirm('Login?'))
+                this.authService.login(this.router.url);
     }
 
     public ngOnInit() {
@@ -61,7 +63,8 @@ export class AppComponent implements OnInit, OnDestroy {
                             },
                         );
                     } else {
-                        // this.router.navigateByUrl('/');
+                        if (this.router.url === '/auth/code')
+                            this.router.navigateByUrl('/');
                     }
                 },
             );
@@ -72,7 +75,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     getClientAuth() {
-        this.clientAuth = this.http.get('client/auth');
+        this.clientAuth = this.http.get('client/auth/');
     }
 
     getBankAuth() {

@@ -6,7 +6,7 @@ import { AuthStatus, IAuthService } from '../http-auth/auth.interface';
 
 @Injectable()
 export class AuthService implements IAuthService {
-    public authStatus$: BehaviorSubject<AuthStatus>;
+    public authStatus$ = new BehaviorSubject<AuthStatus>(null);
     public masterToken: string = null;
     public serviceTokens: { [service: string]: string } = {};
 
@@ -66,7 +66,7 @@ export class AuthService implements IAuthService {
             await this.refreshToken(req).toPromise();
             return this.serviceTokens[info.service];
         } else {
-            if (!this.masterToken) {
+            if (!this.masterToken && info.path !== 'client/auth/') {
                 await this.refreshToken().toPromise();
             }
             return this.masterToken;
@@ -170,9 +170,10 @@ export class AuthService implements IAuthService {
         this.login('/');
     }
 
-    restoreMasterToken() {
+    restoreMasterToken(): boolean {
         this.masterToken = localStorage.getItem('master_token');
         console.log('restored token', this.masterToken);
+        return !!this.masterToken;
     }
 
     saveMasterToken() {
@@ -183,7 +184,7 @@ export class AuthService implements IAuthService {
      * Получить по code access_token
      * @param code
      */
-    public applyGrandCode(code: string): Promise<any> {
+    public applyGrandCode(code: string): Promise<void> {
         // this.status$.next(OnlineStatus.Loging);
         // alert(code);
         console.log('CODE', code);

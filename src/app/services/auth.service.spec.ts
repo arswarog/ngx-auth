@@ -341,11 +341,11 @@ describe('AuthService', () => {
             testingController.verify();
         });
 
-        it('relogin if master token is null (client/auth/)', async () => {
+        it('relogin if master token is null (some/path/)', async () => {
             auth.masterToken = null;
             auth.serviceTokens = {};
 
-            http.get('client/auth/').subscribe((data) => {
+            http.get('some/path/').subscribe((data) => {
                 expect(data).toEqual(expectedData);
             });
 
@@ -421,5 +421,216 @@ describe('AuthService', () => {
         });
 
         /// client/auth 401
+    });
+
+    describe('get access_token by code', () => {
+        let service: AuthService = null;
+
+        beforeEach(() => {
+            TestBed.configureTestingModule({
+                imports  : [
+                    HttpAuthModule,
+                    HttpClientTestingModule,
+                ],
+                providers: [
+                    AuthService,
+                    {
+                        provide    : AUTH_PROVIDER,
+                        useExisting: AuthService,
+                    },
+                ],
+            });
+            service = TestBed.get(AuthService);
+        });
+
+        beforeEach(() => {
+            testingController = TestBed.get(HttpTestingController);
+            http = TestBed.get(HttpClient);
+            auth = TestBed.get(AuthService);
+            auth.login = () => {
+                console.log('login');
+                auth['loginOk'] = true;
+            };
+        });
+
+        afterEach(() => {
+            testingController.verify();
+        });
+
+        it('Send correct code', async () => {
+            auth.masterToken = null;
+
+            auth.applyGrandCode('correct-code').then(
+                () => true,
+                error => {throw new Error('Code is incorrect');},
+            );
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('POST');
+            expect(req.request.body).toEqual({
+                code: 'correct-code',
+            });
+            expect(req.request.headers.get('Authorization')).toBeNull();
+            req.flush({
+                token: 'master.jwt',
+                data : {},
+            });
+            expect(auth.masterToken).toEqual('master.jwt');
+        });
+
+        it('Send correct code with old token', async () => {
+            auth.masterToken = 'old.jwt';
+
+            auth.applyGrandCode('correct-code').then(
+                () => true,
+                error => {throw new Error('Code is incorrect');},
+            );
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('POST');
+            expect(req.request.body).toEqual({
+                code: 'correct-code',
+            });
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer old.jwt');
+            req.flush({
+                token: 'master.jwt',
+                data : {},
+            });
+            expect(auth.masterToken).toEqual('master.jwt');
+        });
+
+        it('Send incorrect code', async () => {
+            auth.masterToken = null;
+
+            auth.applyGrandCode('incorrect-code').then(
+                () => {throw new Error('Code is incorrect');},
+                () => true,
+            );
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('POST');
+            expect(req.request.body).toEqual({
+                code: 'incorrect-code',
+            });
+            expect(req.request.headers.get('Authorization')).toBeNull();
+            req.flush({error: 'Failed grand'}, {status: 401, statusText: 'Unauthorized'});
+            expect(auth.masterToken).toEqual(null);
+        });
+
+        it('Send incorrect code with old token', async () => {
+            auth.masterToken = 'old.jwt';
+
+            auth.applyGrandCode('incorrect-code').then(
+                () => {throw new Error('Code is incorrect');},
+                () => true,
+            );
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(req.request.method).toEqual('POST');
+            expect(req.request.body).toEqual({
+                code: 'incorrect-code',
+            });
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer old.jwt');
+            req.flush({error: 'Failed grand'}, {status: 401, statusText: 'Unauthorized'});
+            expect(auth.masterToken).toEqual('old.jwt');
+        });
+    });
+
+    describe('concurrency', () => {
+        let service: AuthService = null;
+
+        beforeEach(() => {
+            TestBed.configureTestingModule({
+                imports  : [
+                    HttpAuthModule,
+                    HttpClientTestingModule,
+                ],
+                providers: [
+                    AuthService,
+                    {
+                        provide    : AUTH_PROVIDER,
+                        useExisting: AuthService,
+                    },
+                ],
+            });
+            service = TestBed.get(AuthService);
+        });
+
+        beforeEach(() => {
+            testingController = TestBed.get(HttpTestingController);
+            http = TestBed.get(HttpClient);
+            auth = TestBed.get(AuthService);
+            auth.login = () => {
+                console.log('login');
+                auth['loginOk'] = true;
+            };
+        });
+
+        afterEach(() => {
+            testingController.verify();
+        });
+
+        it('Send multiple requests in parallels with bad master token', async () => {
+            auth.masterToken = 'master.jwt';
+            auth.serviceTokens = {
+                bank: 'bad.jwt',
+            };
+
+            http.get('bank/v1:some/path').subscribe(
+                data => expect(data).toEqual(expectedData),
+                error => {throw new Error('Response must be truthy');},
+            );
+
+            http.get('bank/v1:other/path').subscribe(
+                data => expect(data).toEqual(expectedData),
+                error => {throw new Error('Response must be truthy');},
+            );
+
+            await sleep();
+
+            const req = testingController.expectOne(auth.mapping.bank + '/v1/other/path');
+            expect(req.request.method).toEqual('GET');
+            expect(req.request.headers.get('Authorization')).toEqual('Bearer bad.jwt');
+            req.flush({}, {status: 401, statusText: 'Unauthorized'});
+
+            const req2 = testingController.expectOne(auth.mapping.bank + '/v1/some/path');
+            expect(req2.request.method).toEqual('GET');
+            expect(req2.request.headers.get('Authorization')).toEqual('Bearer bad.jwt');
+            req2.flush({}, {status: 401, statusText: 'Unauthorized'});
+
+            await sleep();
+
+            const reqAuth = testingController.expectOne(auth.mapping.bank + '/auth');
+            expect(reqAuth.request.method).toEqual('GET');
+            expect(reqAuth.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            reqAuth.flush({jwt: 'new.jwt'});
+
+            await sleep();
+
+            expect(auth.masterToken).toEqual('master.jwt');
+            expect(auth.serviceTokens).toEqual({
+                bank: 'new.jwt',
+            });
+
+            const reqRetry = testingController.expectOne(auth.mapping.bank + '/v1/other/path');
+            expect(reqRetry.request.method).toEqual('GET');
+            expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
+            reqRetry.flush(expectedData);
+
+            const req2Retry = testingController.expectOne(auth.mapping.bank + '/v1/some/path');
+            expect(req2Retry.request.method).toEqual('GET');
+            expect(req2Retry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
+            req2Retry.flush(expectedData);
+
+            expect(auth['loginOk']).toBeUndefined();
+        });
     });
 });

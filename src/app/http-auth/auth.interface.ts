@@ -9,14 +9,14 @@ export interface IAuthInterceptor {
 }
 
 export enum AuthStatus {
-    Starting,
-    Refreshing,
-    Loging,
-    Unauthorized,
+    Ok = 'ok',
+    Starting = 'starting',
+    Refreshing = 'refreshing',
+    Unauthorized = 'unauthorized',
 }
 
 export interface IAuthService {
-    authStatus$: BehaviorSubject<AuthStatus>;
+    authStatus$: Observable<AuthStatus>;
     getAccessToken(req?: HttpRequest<any>): Promise<string>;
     getTokenType?(req?: HttpRequest<any>): string;
     refreshToken(req?: HttpRequest<any>): Observable<any>;

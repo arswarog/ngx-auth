@@ -1,10 +1,9 @@
 import { HTTP_INTERCEPTORS, HttpClient, HttpClientModule } from '@angular/common/http';
-import { APP_INITIALIZER, Inject, Injector, NgModule, Optional, SkipSelf } from '@angular/core';
-import { Observable, Subject, throwError } from 'rxjs';
-import { AUTH_PROVIDER, IAuthInterceptor, IAuthService } from './auth.interface';
+import { Inject, Injector, NgModule, Optional, SkipSelf } from '@angular/core';
+import { BehaviorSubject, Observable, Subject, throwError } from 'rxjs';
+import { AUTH_PROVIDER, AuthStatus, IAuthInterceptor, IAuthService } from './auth.interface';
 import { AuthInterceptor } from './auth.interceptor';
 import * as Rx from 'rxjs/operators';
-import { AuthService } from '../services/auth.service';
 
 @NgModule({
     providers: [
@@ -40,9 +39,11 @@ export class HttpAuthModule {
                 'HttpAuthModule is already loaded. Import it in the AppModule only');
         }
 
+        auth.authStatus$ = new BehaviorSubject<AuthStatus>(AuthStatus.Starting);
+
         // Получаем интерцепторы которые реализуют интерфейс IAuthInterceptor
         const interceptors = inj.get<IAuthInterceptor[]>(HTTP_INTERCEPTORS)
-                                .filter(i => i.init);
+            .filter(i => i.init);
         // передаем http сервис и сервис авторизации.
         interceptors.forEach(i => i.init(http, auth));
     }

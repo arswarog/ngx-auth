@@ -5,7 +5,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 
 @Injectable()
 export class MockAuthService implements IAuthService {
-    public authStatus$ = new BehaviorSubject<AuthStatus>(AuthStatus.Starting);
+    public authStatus$: Observable<AuthStatus>;
 
     public jwt: string = null;
 

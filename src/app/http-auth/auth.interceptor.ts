@@ -2,7 +2,7 @@ import { HttpClient, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from
 import { Injectable } from '@angular/core';
 import { Observable, Subscriber } from 'rxjs';
 import * as Rx from 'rxjs/operators';
-import { IAuthInterceptor, IAuthService } from './auth.interface';
+import { AuthStatus, IAuthInterceptor, IAuthService } from './auth.interface';
 
 interface CallerRequest {
     subscriber: Subscriber<any>;
@@ -24,10 +24,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
 
     intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
         console.log('*** request', request.url);
-        // перехватываем только "наши" запросы
-        // if (!req.url.includes('api/')) {
-        //    return next.handle(req);
-        // }
+
 
         // оборачиваем Observable из вызывающего кода своим, внутренним Observable
         // далее вернем вызывающему коду Observable, который под нашим контролем здесь
@@ -47,6 +44,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                                     console.log('interceptoer');
                                     this.auth.response(request, response as any);
                                 }
+                                this.auth.authStatus$.next(AuthStatus.Ok);
                                 subscriber.next(response);
                             },
                             err => {
@@ -85,6 +83,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
             // делаем запрос на восстанавливение токена, и установим флаг, дабы следующие "401ые"
             // просто запоминались но не инициировали refresh
             this.refreshInProgress = true;
+            this.auth.authStatus$.next(AuthStatus.Refreshing);
             this.auth.refreshToken(request)
                 .pipe(
                     Rx.tap(console.log),
@@ -97,6 +96,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                         // если токен рефрешнут успешно, повторим запросы которые накопились пока мы ждали ответ от рефреша
                         this.repeatFailedRequests(),
                     () => {
+                        this.auth.authStatus$.next(AuthStatus.Unauthorized);
                         // если по каким - то причинам запрос на рефреш не отработал, то делаем логаут
                         this.auth.logout();
                     },
