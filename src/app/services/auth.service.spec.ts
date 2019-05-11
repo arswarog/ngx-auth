@@ -4,10 +4,13 @@ import { AuthService, urnInfo } from './auth.service';
 import { HttpAuthModule } from '../http-auth/http-auth.module';
 import { TestBed } from '@angular/core/testing';
 import { AUTH_PROVIDER, AuthStatus, sleep } from '../http-auth/auth.interface';
+import { BehaviorSubject } from 'rxjs';
 
 let testingController: HttpTestingController;
 let http: HttpClient;
-let auth: AuthService;
+let auth: AuthService & {
+    authStatus$: BehaviorSubject<AuthStatus>;
+};
 
 const expectedData = [
     {id: '1', name: 'FirstGame', locale: 'ru', type: '2'},
@@ -138,25 +141,29 @@ describe('AuthService', () => {
     });
 
     describe('API', () => {
-        beforeEach(() => TestBed.configureTestingModule({
-            imports  : [
-                HttpAuthModule,
-                HttpClientTestingModule,
-            ],
-            providers: [
-                AuthService,
-                {
-                    provide    : AUTH_PROVIDER,
-                    useExisting: AuthService,
-                },
-            ],
-        }));
+        beforeEach(() => {
+            TestBed.configureTestingModule({
+                imports  : [
+                    HttpAuthModule,
+                    HttpClientTestingModule,
+                ],
+                providers: [
+                    AuthService,
+                    {
+                        provide    : AUTH_PROVIDER,
+                        useExisting: AuthService,
+                    },
+                ],
+            });
+        });
 
         beforeEach(() => {
             testingController = TestBed.get(HttpTestingController);
             http = TestBed.get(HttpClient);
             auth = TestBed.get(AuthService);
             auth.login = () => {throw new Error('WTF?');};
+            auth.authStatus = AuthStatus.Starting;
+            auth.authStatus$.next(AuthStatus.Starting);
         });
 
         afterEach(() => {
@@ -169,11 +176,12 @@ describe('AuthService', () => {
 
         it('request can not start because status is Starting', async () => {
             auth.masterToken = 'master.jwt';
-            auth.authStatus = AuthStatus.Starting;
 
             http.get('client/auth/').subscribe((data) => {
                 expect(data).toEqual(expectedData);
             });
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
 
             await sleep();
 
@@ -189,7 +197,6 @@ describe('AuthService', () => {
 
         it('request can not start because status is Starting', async () => {
             auth.masterToken = 'master.jwt';
-            auth.authStatus = AuthStatus.Starting;
 
             http.get('client/auth/').subscribe((data) => {
                 expect(data).toEqual(expectedData);
@@ -216,6 +223,8 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
             const req = testingController.expectOne(auth.apiUrl + '/client/auth/');
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
@@ -236,6 +245,8 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
             const req = testingController.expectOne(auth.mapping.bank + '/v1/user');
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer bank.jwt');
@@ -245,9 +256,11 @@ describe('AuthService', () => {
         });
 
         it('authorize Authorization header for bank service', async () => {
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
             auth.masterToken = 'master.jwt';
             auth.serviceTokens = {
-                bank: 'bank.jwt',
+                bank: 'old.bank.jwt',
             };
 
             http.get('bank:auth').subscribe((data) => {
@@ -256,9 +269,9 @@ describe('AuthService', () => {
                 });
             });
 
-            expect(auth.authStatus).toEqual(AuthStatus.Refreshing);
-
             await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
 
             const req = testingController.expectOne(auth.mapping.bank + '/auth');
             expect(req.request.method).toEqual('GET');
@@ -286,6 +299,8 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Refreshing);
+
             const reqAuth = testingController.expectOne(auth.mapping.bank + '/auth');
 
             expect(reqAuth.request.method).toEqual('GET');
@@ -296,10 +311,16 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
+
             const reqRefresh = testingController.expectOne(auth.mapping.bank + '/v1/user');
             expect(reqRefresh.request.method).toEqual('GET');
             expect(reqRefresh.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
             reqRefresh.flush(expectedData);
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
 
         it('refresh if 401 (retry queries)', async () => {
@@ -308,11 +329,30 @@ describe('AuthService', () => {
                 bank: 'bad.jwt',
             };
 
+            http.get('client/auth/').subscribe((data) => {
+                expect(data).toEqual(expectedData);
+            });
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
+            const reqPrepare = testingController.expectOne(auth.apiUrl + '/client/auth/');
+            expect(reqPrepare.request.method).toEqual('GET');
+            expect(reqPrepare.request.headers.get('Authorization')).toEqual('Bearer master.jwt');
+            reqPrepare.flush(expectedData);
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
+
             http.get('bank/v1:user').subscribe((data) => {
                 expect(data).toEqual(expectedData);
             });
 
             await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
 
             const req = testingController.expectOne(auth.mapping.bank + '/v1/user');
 
@@ -321,6 +361,8 @@ describe('AuthService', () => {
             req.flush({error: 'Unauthorized'}, {status: 401, statusText: 'Unauthorized'});
 
             await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Refreshing);
 
             const reqRefresh = testingController.expectOne(auth.mapping.bank + '/auth');
             expect(reqRefresh.request.method).toEqual('GET');
@@ -331,10 +373,16 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
+
             const reqRetry = testingController.expectOne(auth.mapping.bank + '/v1/user');
             expect(reqRetry.request.method).toEqual('GET');
             expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
             reqRetry.flush(expectedData);
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
 
         it('404 error', async () => {
@@ -342,6 +390,8 @@ describe('AuthService', () => {
             auth.serviceTokens = {
                 bank: 'bank.jwt',
             };
+
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
 
             http.get('bank/v1:bad/path').subscribe(
                 data => {
@@ -355,10 +405,16 @@ describe('AuthService', () => {
 
             await sleep();
 
+            expect(auth.authStatus).toEqual(AuthStatus.Starting);
+
             const req = testingController.expectOne(auth.mapping.bank + '/v1/bad/path');
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer bank.jwt');
             req.flush(expectedData, {status: 404, statusText: 'Not found'});
+
+            await sleep();
+
+            expect(auth.authStatus).toEqual(AuthStatus.Ok);
         });
     });
 
@@ -650,6 +706,8 @@ describe('AuthService', () => {
             expect(req.request.method).toEqual('GET');
             expect(req.request.headers.get('Authorization')).toEqual('Bearer bad.jwt');
             req.flush({}, {status: 401, statusText: 'Unauthorized'});
+
+            await sleep();
 
             const req2 = testingController.expectOne(auth.mapping.bank + '/v1/some/path');
             expect(req2.request.method).toEqual('GET');

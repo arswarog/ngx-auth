@@ -1,7 +1,6 @@
-import { HttpClient, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from '@angular/common/http';
+import { HttpClient, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, Subscriber } from 'rxjs';
-import * as Rx from 'rxjs/operators';
 import { AuthStatus, IAuthInterceptor, IAuthService } from './auth.interface';
 
 interface CallerRequest {
@@ -23,6 +22,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     }
 
     public setStatus(status: AuthStatus) {
+        console.log('setStatus', status);
         this.auth.authStatus = status;
         (this.auth.authStatus$ as BehaviorSubject<AuthStatus>).next(status);
     }
@@ -44,12 +44,14 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                         = next.handle(req)
                         .subscribe(
                             response => {
-                                // оповещаем в инициатор (success) ответ от сервера
-                                if (this.auth.response) {
-                                    console.log('interceptoer');
-                                    this.auth.response(request, response as any);
+                                if (response instanceof HttpResponse) {
+                                    // оповещаем в инициатор (success) ответ от сервера
+                                    if (this.auth.response) {
+                                        console.log('interceptoer');
+                                        this.auth.response(request, response as any);
+                                    }
+                                    this.setStatus(AuthStatus.Ok);
                                 }
-                                this.setStatus(AuthStatus.Ok);
                                 subscriber.next(response);
                             },
                             err => {
@@ -58,6 +60,7 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
                                     this.handleUnauthorizedError(subscriber, request);
                                 } else {
                                     // оповещаем об ошибке
+                                    this.setStatus(AuthStatus.Ok);
                                     subscriber.error(err);
                                 }
                             },
@@ -141,8 +144,9 @@ export class AuthInterceptor implements HttpInterceptor, IAuthInterceptor {
     private async prepareRequest(req: HttpRequest<any>): Promise<HttpRequest<any>> {
         const needRefresh = await this.auth.isNeedRefresh(req);
         if (needRefresh) {
-
+            this.setStatus(AuthStatus.Refreshing);
             await this.auth.refreshToken(req);
+            // this.setStatus(AuthStatus.Ok);
         }
         const token = await this.auth.getAccessToken(req);
         const tokenType = this.auth.getTokenType ? this.auth.getTokenType(req) : 'Bearer';
