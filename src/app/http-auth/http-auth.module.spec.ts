@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { AUTH_PROVIDER, AuthStatus, IAuthService, sleep } from './auth.interface';
-import { HttpAuthModule } from './http-auth.module';
+import { AuthModule } from './http-auth.module';
 import { MockAuthService } from './mock-auth.service.spec';
 import { BehaviorSubject } from 'rxjs';
 
@@ -20,10 +20,10 @@ const expectedData = [
     {id: '3', name: 'LastGame', locale: 'en', type: '1'},
 ];
 
-describe('HttpAuthModule', () => {
+describe('authModule', () => {
     beforeEach(() => TestBed.configureTestingModule({
         imports  : [
-            HttpAuthModule,
+            AuthModule,
             HttpClientTestingModule,
         ],
         providers: [
@@ -62,7 +62,7 @@ describe('HttpAuthModule', () => {
         expect(req.request.headers.get('Authorization')).toEqual('Bearer some.jwt');
         req.flush(expectedData);
 
-        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Online);
     });
 
     it('append another getAccessToken to Authorization header', async () => {
@@ -91,7 +91,7 @@ describe('HttpAuthModule', () => {
         expect(req2.request.headers.get('Authorization')).toEqual('Bearer another.jwt');
         req2.flush(expectedData);
 
-        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Online);
     });
 
     it('refresh if 401 (retry queries)', async () => {
@@ -129,7 +129,7 @@ describe('HttpAuthModule', () => {
         expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
         reqRetry.flush(expectedData);
 
-        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Online);
     });
 
     it('refresh if not exists another jwt (retry queries)', async () => {
@@ -159,7 +159,7 @@ describe('HttpAuthModule', () => {
         expect(reqRetry.request.headers.get('Authorization')).toEqual('Bearer new.jwt');
         reqRetry.flush(expectedData);
 
-        expect(auth.authStatus$.value).toEqual(AuthStatus.Ok);
+        expect(auth.authStatus$.value).toEqual(AuthStatus.Online);
     });
 
     // error if not 401 (without retry queries)

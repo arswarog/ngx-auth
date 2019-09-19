@@ -4,7 +4,7 @@ import { HttpClient, HttpRequest, HttpResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 
 @Injectable()
-export class MockAuthService implements IAuthService {
+export class MockAuthService /*implements IAuthService*/ {
     public authStatus$: Observable<AuthStatus>;
 
     public jwt: string = null;

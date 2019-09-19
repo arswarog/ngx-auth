@@ -1,9 +1,10 @@
 import { HTTP_INTERCEPTORS, HttpClient, HttpClientModule } from '@angular/common/http';
-import { Inject, Injector, NgModule, Optional, SkipSelf } from '@angular/core';
-import { BehaviorSubject, Observable, Subject, throwError } from 'rxjs';
-import { AUTH_PROVIDER, AuthStatus, IAuthInterceptor, IAuthService } from './auth.interface';
+import { Inject, Injector, ModuleWithProviders, NgModule, Optional, SkipSelf } from '@angular/core';
+import { Subject } from 'rxjs';
+import { AUTH_PROVIDER, IAuthInterceptor, IAuthService } from './auth.interface';
 import { AuthInterceptor } from './auth.interceptor';
 import * as Rx from 'rxjs/operators';
+import { HttpAuthService } from './http-auth.service';
 
 @NgModule({
     providers: [
@@ -17,35 +18,36 @@ import * as Rx from 'rxjs/operators';
         //    deps      : [AUTH_PROVIDER],
         //    multi     : true,
         // },
+        HttpAuthService,
         {
-            provide : HTTP_INTERCEPTORS,
-            useClass: AuthInterceptor,
-            multi   : true,
+            provide   : HTTP_INTERCEPTORS,
+            useFactory: AuthInterceptorFactory,
+            multi     : true,
         },
     ],
-    exports  : [HttpClientModule],
+    exports  : [
+        HttpClientModule,
+    ],
 })
-
-export class HttpAuthModule {
+export class AuthModule {
     // @Optional() @SkipSelf() - если вдруг мы попытаемся импортировать CoreModule в AppModule и например UserModule - получим ошибку
-    constructor(@Optional() @SkipSelf() parentModule: HttpAuthModule,
+    constructor(@Optional() @SkipSelf() parentModule: AuthModule,
                 inj: Injector,
-                // auth: AuthService,
-                @Inject(AUTH_PROVIDER) auth: IAuthService,
-                http: HttpClient) {
-        if (parentModule) {
-            // если мы здесь, значит случайно включили CoreModule в двух и более местах
+                service: HttpAuthService,
+                @Inject(AUTH_PROVIDER) auth: IAuthService) {
+        if (parentModule)
+        // если мы здесь, значит случайно включили модуль в двух и более местах
             throw new Error(
-                'HttpAuthModule is already loaded. Import it in the AppModule only');
-        }
+                'authModule is already loaded. Import it in the AppModule only');
 
-        auth.authStatus$ = new BehaviorSubject<AuthStatus>(AuthStatus.Starting);
+        // Инжектим AUTH_PROVIDER в сервис
+        service.init(auth);
 
         // Получаем интерцепторы которые реализуют интерфейс IAuthInterceptor
         const interceptors = inj.get<IAuthInterceptor[]>(HTTP_INTERCEPTORS)
             .filter(i => i.init);
         // передаем http сервис и сервис авторизации.
-        interceptors.forEach(i => i.init(http, auth));
+        interceptors.forEach(i => i.init(service));
     }
 }
 
@@ -64,4 +66,15 @@ export function refreshToken(auth: IAuthService): () => Promise<any> {
             },
         );
     };
+}
+
+let interceptor: AuthInterceptor = null;
+
+export function AuthInterceptorFactory() {
+    if (interceptor)
+        return interceptor;
+
+    interceptor = new AuthInterceptor();
+
+    return interceptor;
 }
